@@ -36,5 +36,7 @@ BODY BUILT (v0.1, pure Python stdlib, ₹0, runs on 8GB).
 ## Next
 - Test the TUI live: `python -m benny` in project root.
 - (Optional) add GOOGLE_API_KEY → flip `brain.mode` to gemini for the smart engine.
-- Commit once user green-lights git (repo not yet created/committed).
+- Brain queued: Gemini cloud any time, or local 4-8B on the Victus (Jan 2027).
+- Pushed to GitHub: `lucifer098123-beep/Benny-AI` (private, commit 0a10465).
+
 
