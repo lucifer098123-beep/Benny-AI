@@ -39,7 +39,17 @@ for /f "usebackq delims=" %%F in ("%TEMP%\benny_files.txt") do (
     if /I not "%%F"=="scripts/auto-push.cmd" (
         echo scanning %%F...
         git show :%%F > "%SCANOVER%" 2>nul
-        findstr /r /c:"AIza[0-9A-Za-z_-]" /c:"sk-[A-Za-z0-9]" /c:"eyJ[A-Za-z0-9._-]" /c:"-----BEGIN" /c:"AKIA[0-9A-Z]" /c:"[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]" "%SCANOVER%" >nul
+        REM Multiple SHORT findstr calls (each under findstr's 127-char
+        REM limit) OR'd together. A match on ANY one flags a violation.
+        findstr /r /c:"AIza[0-9A-Za-z_-]" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /r /c:"sk-[A-Za-z0-9]" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /r /c:"eyJ[A-Za-z0-9._-]" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /r /c:"-----BEGIN" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /r /c:"AKIA[0-9A-Z]" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /r /c:"Bearer [A-Za-z0-9]" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /i /c:"GOOGLE_API_KEY=" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /i /c:"OPENAI_API_KEY=" "%SCANOVER%" >nul
+        if errorlevel 1 findstr /i /c:"API_KEY=" "%SCANOVER%" >nul
         if not errorlevel 1 (
             echo.
             echo [benny] !!! Possible secret VALUE found in %%F
