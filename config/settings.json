@@ -1,0 +1,49 @@
+{
+  "agent": {
+    "name": "benny",
+    "version": "0.1.0",
+    "default_verbosity": "concise",
+    "thinking_threshold": 0.6
+  },
+  "paths": {
+    "memory_dir": "data/memory",
+    "audit_dir": "data/audit",
+    "log_dir": "data/logs"
+  },
+  "brain": {
+    "mode": "none",
+    "router": null,
+    "workhorse": null,
+    "brain": null,
+    "cloud": {
+      "provider": null,
+      "endpoint": null,
+      "max_requests_per_day": 500
+    }
+  },
+  "security": {
+    "fingerprint": {
+      "enabled": false,
+      "device_ids": []
+    },
+    "auto_lock": {
+      "idle_timeout_seconds": 600,
+      "lock_on_screen": true
+    },
+    "tamper": {
+      "max_failures": 3,
+      "decoy_enabled": true,
+      "wipe_on_extreme": false
+    }
+  },
+  "gatekeeper": {
+    "default_deny": true,
+    "https_only": true,
+    "no_ip_urls": true,
+    "allow_domains": [],
+    "allow_regex": [],
+    "ask_on_new": true,
+    "audit_enabled": true,
+    "blocked_topics": ["political propaganda", "engagement bait", "unverified claims"]
+  }
+}

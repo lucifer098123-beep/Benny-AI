@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+
+# Local data & secrets (never commit)
+data/
+config/secrets.json
+.env
+
+# OS
+Thumbs.db
+.DS_Store
