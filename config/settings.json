@@ -10,10 +10,34 @@
     "audit_dir": "data/audit",
     "log_dir": "data/logs"
   },
+  "memory": {
+    "budget": {
+      "hot_max_episodes": 200,
+      "hot_max_kb": 5120,
+      "warm_max_nodes": 2000,
+      "cold_max_nodes": 20000,
+      "vault_max_mb": 2048,
+      "promote_hot_to_warm": true,
+      "promote_warm_to_cold": true,
+      "promote_cold_to_ancient": true
+    }
+  },
+  "ram": {
+    "budget": {
+      "target_total_mb": 2048,
+      "model_resident_mb": 1536,
+      "hot_working_mb": 256,
+      "tools_resident_mb": 128,
+      "headroom_mb": 128,
+      "hard_fail_gb": 32,
+      "max_hot_mb": 256,
+      "evict_hot_when_over": true
+    }
+  },
   "brain": {
-    "mode": "none",
+    "mode": "ollama",
     "router": null,
-    "workhorse": null,
+    "workhorse": "llama3.2:3b",
     "brain": null,
     "cloud": {
       "provider": null,

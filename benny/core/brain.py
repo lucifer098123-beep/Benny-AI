@@ -82,12 +82,72 @@ class GeminiBrain(Brain):
             return f"brain-error: {e}"
 
 
+class OllamaBrain(Brain):
+    """Local, offline model via Ollama (localhost:11434).
+
+    No data ever leaves the machine — the model has no route out, which is
+    exactly the gatekeeper's default-deny stance. Pick the model tag from
+    config (e.g. 'llama3.2:3b'). If Ollama isn't running, falls through to
+    the rule brain so benny still answers.
+    """
+
+    name = "ollama"
+    endpoint = "http://localhost:11434/api/chat"
+
+    def __init__(self, model: str | None = None):
+        self.model = model or "llama3.2:3b"
+
+    @property
+    def ready(self) -> bool:
+        # Ollama is up if the version endpoint answers quickly.
+        try:
+            req = urllib.request.Request(
+                "http://localhost:11434/api/version", method="GET"
+            )
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def generate(self, prompt: str, system: str = "") -> str:
+        if not self.ready:
+            return "NO_OLLAMA"
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        body = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": 0.7, "num_predict": 512},
+        }
+        req = urllib.request.Request(
+            self.endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data.get("message", {}).get("content", "").strip() or "(empty)"
+        except Exception as e:
+            return f"brain-error: {e}"
+
+
 def build_brain(cfg: dict) -> Brain:
-    """Choose brain based on config ('none' | 'gemini' | 'rule')."""
+    """Choose brain based on config ('none' | 'gemini' | 'ollama' | 'rule')."""
     mode = cfg.get("brain", {}).get("mode", "none")
     if mode == "gemini":
         b = GeminiBrain()
         if b.ready:
             return b
         # fall through to rule if no key
+    if mode == "ollama":
+        model = cfg.get("brain", {}).get("workhorse") or "llama3.2:3b"
+        b = OllamaBrain(model=model)
+        if b.ready:
+            return b
+        # fall through to rule if Ollama isn't running
     return RuleBrain()
