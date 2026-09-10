@@ -81,54 +81,41 @@ class Agent:
         new_pat = self.memory.recombine()
 
         text = user_input.lower().strip()
+        real_brain = isinstance(self.brain, (CopilotBrain, GeminiBrain))
         out = ""
 
-        if any(k in text for k in ("memory", "pref", "rememb", "know", "learn", "fact")):
-            key = self.mock_key(user_input)
-            out = self.memory_handler(text, key, user_input)
-        elif any(k in text for k in ("file", "folder", "size", "disk", "director")):
-            out = self.files_handler(text)
-        elif any(k in text for k in ("system", "process", "ram", "memory usage", "cpu")):
-            out = self.system_handler(text)
-        elif any(k in text for k in ("code", "python", "run", "execute", "script")):
-            out = self.code_handler(text)
-        elif any(k in text for k in ("web", "fetch", "search", "internet", "http")):
-            out = self.web_handler(text)
-        elif any(k in text for k in ("help", "what can you do", "commands")):
-            out = self.help()
-        elif any(k in text for k in ("history", "growth", "versions", "journey", "who are you", "your story", "origin")):
-            out = self.history_handler(text)
-        elif any(k in text for k in ("level", "calibrate", "novice", "intermediate", "expert")):
-            # set or show the calibrated level
-            for tag in ("novice", "intermediate", "expert"):
-                if tag in text and any(p in text for p in ("level", "calibrate", "as", "set", "im", "i am", "treat")):
-                    out = self.set_level(tag)
-                    break
-            else:
-                out = f"current level: {self.calibrate_level()} (say 'set level <novice/intermediate/expert>')"
-        elif "prune" in text or ("clear" in text and "memory" in text):
-            self.memory.purge()
-            out = "memory purged. clean slate."
-        else:
+        cmd = self._route_command(text, user_input, real_brain)
+        if cmd is not None:
+            out = cmd
+        elif real_brain:
             # Gate 1+2+3: calibrate level, shape the prompt, and build with the brain.
-            if isinstance(self.brain, (CopilotBrain, GeminiBrain)):
-                # Layer 2: silent W-judgment pass before benny commits.
-                rec = self.judge.analyze(user_input)
-                verdict = rec["verdict"]
-                extra = ""
-                if verdict == "refuse":
-                    out = self.judge.advise(user_input)
-                    self.memory.record_episode("benny", out)
-                    return out
-                if verdict == "warn":
-                    extra = (f"\n[internal judgment: {rec['w']['where']}, impact {rec['w']['weight']}/5 — "
-                             f"{rec['reason']}]")
-                prompt = self.build_system_prompt(user_input)
-                out = self.brain.generate(
-                    user_input, system=prompt, heavy=self._needs_heavy(user_input)
-                )
-                if extra:
-                    out += extra
+            # Layer 2: silent W-judgment pass before benny commits.
+            rec = self.judge.analyze(user_input)
+            verdict = rec["verdict"]
+            extra = ""
+            if verdict == "refuse":
+                out = self.judge.advise(user_input)
+                self.memory.record_episode("benny", out)
+                return out
+            if verdict == "warn":
+                extra = (f"\n[internal judgment: {rec['w']['where']}, impact {rec['w']['weight']}/5 — "
+                         f"{rec['reason']}]")
+            prompt = self.build_system_prompt(user_input)
+            out = self.brain.generate(
+                user_input, system=prompt, heavy=self._needs_heavy(user_input)
+            )
+            if extra:
+                out += extra
+        else:
+            # rule brain (no model): keyword-driven, free-form stays keyword-driven
+            if any(k in text for k in ("file", "folder", "size", "disk", "director")):
+                out = self.files_handler(text)
+            elif any(k in text for k in ("system", "process", "ram", "memory usage", "cpu")):
+                out = self.system_handler(text)
+            elif any(k in text for k in ("code", "python", "run", "execute", "script")):
+                out = self.code_handler(text)
+            elif any(k in text for k in ("web", "fetch", "search", "internet", "http")):
+                out = self.web_handler(text)
             else:
                 out = f"(rule-based v1) got: {user_input}\nUse 'help' to see what I can do."
 
@@ -136,6 +123,47 @@ class Agent:
         if new_pat:
             out += f"\n[learned {len(new_pat)} pattern(s)]"
         return out
+
+    def _route_command(self, text: str, raw: str, real_brain: bool) -> str | None:
+        """Intercept explicit commands. Free-form text is left for the model.
+
+        With a real brain online, only short, explicit commands are routed to
+        the tool handlers — the model gets everything else, so words like
+        'memory' or 'file' inside a question never hijack the conversation.
+        """
+        if any(k in text for k in ("help", "what can you do", "commands")):
+            return self.help()
+        if text.startswith("remember ") and " is " in text:
+            return self.memory_handler(text, self.mock_key(raw), raw)
+        if text in ("what do you know", "what do you know?", "prefs", "facts",
+                    "what do i know", "what do you remember"):
+            return self.memory_handler(text, "", raw)
+        if "prune" in text or ("clear" in text and "memory" in text):
+            if len(text) <= 30:
+                self.memory.purge()
+                return "memory purged. clean slate."
+        if "level" in text and len(text) <= 60:
+            for tag in ("novice", "intermediate", "expert"):
+                if tag in text and any(p in text for p in ("level", "calibrate", "as", "set", "im", "i am", "treat")):
+                    return self.set_level(tag)
+            return f"current level: {self.calibrate_level()} (say 'set level <novice/intermediate/expert>')"
+        if any(k in text for k in ("history", "growth", "versions", "journey",
+                                   "who are you", "your story", "origin")) and len(text) <= 40:
+            return self.history_handler(text)
+        if len(text) <= 40 and any(k in text for k in ("file", "folder", "size", "disk", "director")):
+            return self.files_handler(text)
+        if len(text) <= 40 and any(k in text for k in ("system", "process", "ram", "memory usage", "cpu")):
+            return self.system_handler(text)
+        if len(text) <= 40 and any(k in text for k in ("code", "python", "run", "execute", "script")):
+            return self.code_handler(text)
+        if len(text) <= 40 and any(k in text for k in ("web", "fetch", "search", "internet", "http")):
+            return self.web_handler(text)
+        if not real_brain:
+            # fall back to the old substring matching so the rule brain
+            # still answers keyword questions with no model attached.
+            if any(k in text for k in ("memory", "pref", "rememb", "know", "learn", "fact")):
+                return self.memory_handler(text, self.mock_key(raw), raw)
+        return None
 
     # ---- Layer 1: the three-gate pipeline (calibrate -> clarify -> build) ----
     def calibrate_level(self) -> str:
