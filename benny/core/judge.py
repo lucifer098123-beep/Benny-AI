@@ -54,7 +54,7 @@ class Judge:
         # Explicit real-human targets (faster + more specific) first — these are HARD.
         person_targets = re.compile(
             r"classmate|friend|his |her |their |someone[’'']?s|that guy|that person|"
-            r"my [^\s]+'s [^\s]+|him|her|them\b"
+            r"my [^\s]+'s [^\s]+|\b(him|her|them)\b"
         )
         # verb that implies reaching INTO a person's private space / attacking a person
         if re.search(
