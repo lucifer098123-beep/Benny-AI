@@ -10,6 +10,11 @@ agent = Agent(ask_callback=lambda p: False)
 print("=== auth ===")
 print(agent.authenticate())
 
+print("\n=== brain ===")
+print(f"{type(agent.brain).__name__} | ready={getattr(agent.brain, 'ready', None)}"
+      f" | model={getattr(agent.brain, 'model', '-')}"
+      f" | heavy={getattr(agent.brain, 'model_heavy', '-')}")
+
 print("\n=== memory: remember + recall ===")
 print(agent.respond("remember project is benny-ai"))
 print(agent.respond("what do you know"))

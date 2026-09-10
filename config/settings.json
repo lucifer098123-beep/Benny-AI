@@ -35,13 +35,12 @@
     }
   },
   "brain": {
-    "mode": "ollama",
-    "router": null,
-    "workhorse": "llama3.2:3b",
-    "brain": null,
+    "mode": "copilot",
+    "model": "gpt-4o-mini",
+    "model_heavy": "gpt-4.1",
     "cloud": {
-      "provider": null,
-      "endpoint": null,
+      "provider": "github-copilot",
+      "endpoint": "https://api.githubcopilot.com/chat/completions",
       "max_requests_per_day": 500
     }
   },

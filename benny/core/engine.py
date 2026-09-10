@@ -160,6 +160,17 @@ class Agent:
         ambiguous = ("it", "that", "those", "this", "something", "help me", "make it")
         return any(w in text for w in ambiguous) and text.rstrip().endswith("?")
 
+    # ---- heavy-task routing (the cloud router: cheap model for routine, big for hard) ----
+    HEAVY_HINTS = (
+        "explain", "why", "compare", "plan", "analyz", "design", "architect",
+        "refactor", "debug", "document", "summar", "build me", "walk me through",
+        "what is the best", "how do i", "how does", "pros and cons", "estimate",
+    )
+
+    def _needs_heavy(self, text: str) -> bool:
+        low = text.lower()
+        return len(text) > 200 or any(h in low for h in self.HEAVY_HINTS)
+
     def build_system_prompt(self, user_input: str) -> str:
         """Compose the brain system prompt with the calibration layered in."""
         level = self.calibrate_level()
