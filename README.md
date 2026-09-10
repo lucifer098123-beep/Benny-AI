@@ -1,13 +1,17 @@
 # Benny-AI
 
-A private, offline personal agent — the **body** is done, the **brain** is queued.
+A private, personal agent that grows by motherboard (model) upgrades — never by rebuilding.
 
 ## State (read this first if you come back later)
 
-- **Body: DONE** (v0.1, commit `0a10465`) — memory (recombination engine) + 4 tools (files/system/code-exec/web) + security (device-lock) + default-deny gatekeeper + pluggable brain + terminal TUI.
-- **Brain: QUEUED** — the only missing piece. Plug it in without rebuilding anything:
-  - any time → Gemini free-tier (mode `gemini`, needs `GOOGLE_API_KEY`)
-  - Jan 2027 → local 4-8B model on the Victus (RTX 3050 / 16GB)
-- ₹0, runs on 8GB, pure Python stdlib, zero third-party deps.
+- **Body: DONE** (v0.1) — memory (recombination engine) + 4 tools (files/system/code-exec/web) + security (device-lock) + default-deny gatekeeper + pluggable brain + terminal TUI.
+- **Brain: LIVE on GitHub Copilot** (v0.2) — the user's own GitHub Copilot plan drives an OpenAI-compatible `/chat/completions` endpoint (`api.githubcopilot.com`) authenticated with the same token `gh` CLI uses. No extra key, no signup. Models confirmed on this plan: `gpt-4.1` (heavy), `gpt-4o`, `gpt-4o-mini` (default), `gpt-3.5-turbo`.
+- Two-model router: routine requests → `gpt-4o-mini` (fast), long/deep-reasoning requests → `gpt-4.1` (brain).
+- Falls back to a rule brain (offline, no smarts) if no token is found; Gemini adapter still ships if you ever want it.
+- ₹0, pure Python stdlib, zero third-party deps. 8GB-friendly: no local model resident, so RAM stays free.
 - Run it: `python -m benny`
-- Test it: `python scripts\smoke_test.py`
+- Test it: `python scripts\smoke_test.py` (core) + `python scripts\brain_check.py` (live Copilot probe)
+
+## Token resolution (CopilotBrain)
+
+Order: `config/secrets.json` → env `GITHUB_TOKEN` → `gh auth token` (OS keyring). No config needed if `gh` is already authenticated.

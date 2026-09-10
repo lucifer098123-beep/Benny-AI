@@ -1,6 +1,6 @@
 # Benny-AI
 
-Offline personal AI agent, named after the assistant's own model. Privacy-first, self-owning, grows by motherboard (model) upgrades.
+Private personal AI agent, named after the assistant's own model. Privacy-first, self-owning, grows by motherboard (model) upgrades.
 
 ## Core principle (the motherboard theory)
 - Never weld learning into the model.
@@ -9,34 +9,32 @@ Offline personal AI agent, named after the assistant's own model. Privacy-first,
 - The model is the load-bearing engine, not scaffolding.
 
 ## Stack (v1 target)
-- Ollama (localhost:11434) — model runtime
-- Models: Llama 3.2 1B (router, resident) + Llama 3.2 3B (workhorse, resident) + Qwen3 8B (brain, lazy-load)
+- **Brain: GitHub Copilot API** (`api.githubcopilot.com`) — OpenAI-compatible, authenticated by the user's own `gh` token. Models: `gpt-4o-mini` (routine) + `gpt-4.1` (heavy). No local inference, no RAM tax, ₹0.
 - Python 3.14 — agent core
 - Hardware: 8GB RAM / Intel UHD / Windows 11 / CPU-only
+- Offline fallbacks: rule brain (no token) or Gemini adapter (optional key)
 
 ## Architecture
-Router(1B) → Workhorse(3B) → Brain(8B, lazy).
+Router (rule-based: cheap model for routine, heavy for deep requests) → CopilotBrain.
 Tools (files/system/code/web) + free-floating memory + security + default-deny gatekeeper.
 
 ## Security
 VeraCrypt AES-256 + hardware fingerprint (UUID/mobo/CPU) + auto-lock + tamper response + dead-man's switch + device binding + decoy data.
 
 ## Gatekeeper (EXTRA-HARD)
-Default-deny, allowlist-only, localhost-lock, request classifier, response sanitizer, content-vibe guard (no slop / no belief absorption), approval gate, full audit log.
+Default-deny, allowlist-only, localhost-lock, request classifier, response sanitizer, content-vibe guard (no slop / no belief absorption), approval gate, full audit log. The only outbound path by default is the brain's own model endpoint (fixed in code).
 
 ## Status
-BODY BUILT (v0.1, pure Python stdlib, ₹0, runs on 8GB).
-- Implemented: memory store (+recombination), files/system/code-exec/web tools, device-lock security, default-deny gatekeeper, pluggable brain (rule fallback + Gemini free-tier adapter), terminal TUI.
-- Smoke test: `python scripts\smoke_test.py` → ALL PASSED.
+BODY BUILT (v0.1) + BRAIN LIVE (v0.2, Copilot). Pure Python stdlib, ₹0, runs on 8GB.
+- Implemented: memory store (+recombination), files/system/code-exec/web tools, device-lock security, default-deny gatekeeper, pluggable brain (rule fallback + Copilot primary + Gemini adapter), terminal TUI.
+- Smoke test: `python scripts\smoke_test.py` → ALL PASSED. Live probe: `python scripts\brain_check.py` → light + heavy both answer.
 - Zero third-party deps (psutil/wmi avoided; stdlib only).
-- Brain wiring: `config/settings.json` `brain.mode` = none|gemini|rule. Gemini needs `GOOGLE_API_KEY` in env or `config/secrets.json` (gitignored). No key = rule brain (offline).
-- Device binding is opt-in (`security.fingerprint.enabled`) — off for first-run freedom.
-- Ollama models (1B/3B/8B) NOT pulled — RAM/disk and the 8B-hardware-wall discussed; use Gemini free tier as the smart ₹0 brain, small local model on the Victus later.
+- Brain wiring: `config/settings.json` `brain.mode` = copilot|gemini|rule. Copilot token comes from `gh auth token` (keyring), env `GITHUB_TOKEN`, or `config/secrets.json` `github_token` (gitignored).
+- Command routing: with a real brain online, only explicit short commands hit the tool handlers (ram / remember / help / prune / fetch…); free-form questions go straight to the model — words like "memory" or "file" inside a question never hijack the conversation.
+- Ollama removed (2026-09-10): always-online usage makes a local model a pure RAM tax; the Copilot brain is smarter and leaves all 8GB free. Revisit local models only if a no-internet mode is ever required.
 
 ## Next
-- Test the TUI live: `python -m benny` in project root.
-- (Optional) add GOOGLE_API_KEY → flip `brain.mode` to gemini for the smart engine.
-- Brain queued: Gemini cloud any time, or local 4-8B on the Victus (Jan 2027).
-- Pushed to GitHub: `lucifer098123-beep/Benny-AI` (private, commit 0a10465).
-
-
+- Run the live TUI: `python -m benny`.
+- (Optional) tune `config/settings.json` brain models or level routing.
+- Brain ladder for the Victus (2027, RTX 3050 / 16GB): stays on cloud until a local model beats it on quality-per-RAM.
+- Pushed to GitHub: `lucifer098123-beep/Benny-AI` (private).
