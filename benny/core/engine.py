@@ -6,7 +6,7 @@ rule-based router + optional cloud/local brain.
 from __future__ import annotations
 
 from . import load_config, setup_logging, project_root
-from .brain import build_brain, OllamaBrain, GeminiBrain
+from .brain import build_brain, CopilotBrain, GeminiBrain
 from .judge import Judge
 from ..memory import MemoryStore, HistoryStore
 from ..security.device_lock import DeviceLock
@@ -111,7 +111,7 @@ class Agent:
             out = "memory purged. clean slate."
         else:
             # Gate 1+2+3: calibrate level, shape the prompt, and build with the brain.
-            if isinstance(self.brain, (OllamaBrain, GeminiBrain)):
+            if isinstance(self.brain, (CopilotBrain, GeminiBrain)):
                 # Layer 2: silent W-judgment pass before benny commits.
                 rec = self.judge.analyze(user_input)
                 verdict = rec["verdict"]
@@ -124,7 +124,9 @@ class Agent:
                     extra = (f"\n[internal judgment: {rec['w']['where']}, impact {rec['w']['weight']}/5 — "
                              f"{rec['reason']}]")
                 prompt = self.build_system_prompt(user_input)
-                out = self.brain.generate(user_input, system=prompt)
+                out = self.brain.generate(
+                    user_input, system=prompt, heavy=self._needs_heavy(user_input)
+                )
                 if extra:
                     out += extra
             else:
