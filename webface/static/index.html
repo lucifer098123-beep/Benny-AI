@@ -28,13 +28,15 @@
   <main id="chat">
     <div class="msg benny">
       <div class="bubble">secure · private · all-local.
-i'm the same benny as ever, just wearing a better face. talk to me.</div>
+now with eyes — attach an image or gif and i'll describe it.</div>
     </div>
   </main>
 
   <footer id="inputbar">
-    <input id="entry" type="text" placeholder="talk to benny…" autocomplete="off" spellcheck="false">
+    <button id="attach" title="send benny an image">📎</button>
+    <input id="entry" type="text" placeholder="talk to benny, or attach an image / gif…" autocomplete="off" spellcheck="false">
     <button id="send" title="send">↵</button>
+    <input id="file" type="file" accept="image/*,.gif" hidden>
   </footer>
 </div>
 

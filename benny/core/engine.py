@@ -199,6 +199,20 @@ class Agent:
         low = text.lower()
         return len(text) > 200 or any(h in low for h in self.HEAVY_HINTS)
 
+    def _load_persona(self) -> str:
+        """Load the persona layer (identity + user-understanding + emoji vault)
+        from the persona/ folder, on top of the core identity.json soul."""
+        persona_dir = self.root / "persona"
+        sections = []
+        for name in ("identity.md", "user.md", "emoji.md"):
+            f = persona_dir / name
+            if f.exists():
+                try:
+                    sections.append(f.read_text(encoding="utf-8").strip())
+                except Exception:
+                    continue
+        return "\n\n---\n\n".join(sections)
+
     def build_system_prompt(self, user_input: str) -> str:
         """Compose the brain system prompt with the calibration layered in."""
         level = self.calibrate_level()
@@ -218,7 +232,8 @@ class Agent:
                 "question beats a wrong guess."
             ),
         }[level]
-        return f"{self.system_prompt}\n\n{guide}"
+        persona = self._load_persona()
+        return f"{self.system_prompt}\n\nPERSONA LAYER (this is how you talk):\n\n{persona}\n\n{guide}"
 
     def mock_key(self, prompt):
         # simplistic pref extraction: 'remember X is Y'
