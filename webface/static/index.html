@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>benny</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <div class="orb" id="orb" role="img" aria-label="benny is breathing"></div>
+      <div class="brandtxt">
+        <span class="name">benny</span>
+        <span class="version" id="version">webface 0.1</span>
+      </div>
+    </div>
+    <div class="meta">
+      <span class="badge" id="level-badge">novice</span>
+      <span class="chip" id="mem-chip">mem 0</span>
+      <span class="chip" id="lat-chip"></span>
+    </div>
+  </header>
+
+  <main id="chat">
+    <div class="msg benny">
+      <div class="bubble">secure · private · all-local.
+i'm the same benny as ever, just wearing a better face. talk to me.</div>
+    </div>
+  </main>
+
+  <footer id="inputbar">
+    <input id="entry" type="text" placeholder="talk to benny…" autocomplete="off" spellcheck="false">
+    <button id="send" title="send">↵</button>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -33,6 +33,13 @@ BODY BUILT (v0.1) + BRAIN LIVE (v0.2, Copilot). Pure Python stdlib, ₹0, runs o
 - Command routing: with a real brain online, only explicit short commands hit the tool handlers (ram / remember / help / prune / fetch…); free-form questions go straight to the model — words like "memory" or "file" inside a question never hijack the conversation.
 - Ollama removed (2026-09-10): always-online usage makes a local model a pure RAM tax; the Copilot brain is smarter and leaves all 8GB free. Revisit local models only if a no-internet mode is ever required.
 
+## Webface (browser face, 2026-09-12)
+- `webface/` = serene-tech browser UI (aurora backdrop + breathing Siri-style orb). Pure stdlib `http.server`, localhost-only (`127.0.0.1:7749`), zero deps, engine untouched — it's a front door, not a rebuild.
+- Run: `scripts\run-webface.cmd` (boots + opens browser) or `python -m webface`.
+- Same Agent the TUI uses: device-lock auth on boot, `agent.respond()` per message, memory counter + level badge + latency chips live in the topbar.
+- Security stance: gatekeeper auto-answers NO (`ask_callback=False`) — no silent network. An in-UI approval gate is the v2 upgrade alongside a markdown renderer + conversation history.
+- Verified: boot + auth, GET / (orb + aurora present), CSS (breathe/morph keyframes), JS, favicon, POST /chat round-trip (mem counter + level + latency returned), py_compile + zero-third-party check green.
+
 ## Next
 - Run the live TUI: `python -m benny`.
 - (Optional) tune `config/settings.json` brain models or level routing.

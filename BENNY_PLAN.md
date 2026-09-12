@@ -49,30 +49,34 @@ Disk:           Internal SSD (encrypted vault partition)
 
 | # | Piece | What | Notes |
 |---|-------|------|-------|
-| 1 | **Ollama** | model runtime | binds to `localhost:11434` only (no out route) |
-| 2 | **Models** | 3-model ladder | see below |
+| 1 | **GitHub Copilot API** | model runtime | `api.githubcopilot.com`, OpenAI-compatible, authed via `gh` token |
+| 2 | **Models** | 2-tier ladder | see below |
 | 3 | **Python 3.14** | agent core | present, verified `3.14.3` |
 
 ### 3.1 The Model Ladder (speed-first, context-aware)
 
-| Role | Model | Size | Resident | Speed (CPU) | Use |
-|------|-------|------|----------|-------------|-----|
-| Router | Llama 3.2 1B | 1.3GB | yes | 20-30 tok/s (instant) | classify task: trivial / simple / complex |
-| Workhorse | Llama 3.2 3B | 2.0GB | yes | 10-15 tok/s | 80% of tasks, decisive + low-verbosity |
-| Brain | Qwen3 8B | 5.2GB | lazy-load | 3-5 tok/s | complex/deep reasoning; hybrid thinking toggle |
+> Updated 2026-09-10: Ollama + the 1B/3B/8B ladder was retired. The user is
+> always online, so a local model on 8GB is a pure RAM tax with weaker
+> reasoning. The Copilot API serves models that are smarter AND leave RAM free.
+
+| Role | Model | Size | Where it runs | Use |
+|------|-------|------|---------------|-----|
+| Router | rule-based | ~0 | local, instant | classify routine vs heavy (length + reasoning keywords) |
+| Workhorse | gpt-4o-mini | cloud | Copilot API | 80% of tasks, decisive + low-verbosity |
+| Brain | gpt-4.1 | cloud | Copilot API | complex/deep reasoning on longer or hard questions |
 
 ```
-RESIDENT:  1B + 3B (fits ~5GB, comfortable)
-LAZY:      8B (loads on-demand only, close other apps when active)
-SWAP:      only ONE big model hot at a time (8GB RAM constraint)
+RESIDENT:  nothing — no local model, all 8GB RAM stays yours
+LAZY:      heavy model (gpt-4.1) only on requests that need it
 ```
 
 ### 3.2 Future Motherboard Upgrades
 
 ```
-P1 NOW:           3B workhorse + 8B brain on CPU
-P2 2027 (Victus RTX 3050 6GB / 16GB): Qwen3 14B on GPU, sub-1s replies
-P3 future:        30B MoE / Gemma 4 26B
+P1 NOW:          gpt-4o-mini workhorse + gpt-4.1 brain (cloud, ₹0, 8GB free)
+P2 2027 (Victus RTX 3050 6GB / 16GB): evaluate local Qwen3 14B on GPU —
+                only if it beats cloud on quality-per-RAM for the use cases
+P3 future:       30B MoE / Gemma 4 26B locally, cloud stays the fallback
 
 memory/security/tools carry over 1:1 on every upgrade.
 ```
@@ -84,9 +88,9 @@ memory/security/tools carry over 1:1 on every upgrade.
 ```
                 ┌─────────────────────────────┐
  user input ──▶ │  AGENT CORE (python, light)  │
-                │  ├─ ROUTER      (1B resident)   → classify
-                │  ├─ WORKHORSE   (3B resident)   → most tasks
-                │  ├─ BRAIN       (8B lazy, think) → complex
+                │  ├─ ROUTER      (rule-based)  → classify light vs heavy
+                │  ├─ WORKHORSE   (gpt-4o-mini) → most tasks
+                │  ├─ BRAIN       (gpt-4.1)     → complex
                 │  ├─ TOOLS       (files/sys/code/web)
                 │  ├─ MEMORY      (free-floating JSON)
                 │  ├─ GATEKEEPER  (network, default-deny)
@@ -175,9 +179,9 @@ Every byte in/out requires user awareness + approval.
 
 ### 8.2 Hardware/logical isolation
 ```
-- ollama binds 127.0.0.1 only (model has no route out)
+- brain talks to its model endpoint over an https call (endpoint fixed in code)
 - agent runs in sandboxed process
-- only network path = tiny controlled proxy
+- only network path = the brain endpoint + the tiny controlled proxy (web tool)
 - OS firewall backs it up
 ```
 
@@ -237,12 +241,13 @@ No belief-absorption:
 ✅ security (fingerprint/autolock/tamper/encryption)
 ✅ encryption choice (VeraCrypt AES-256, proven)
 ✅ hardware (internal drive, ₹0)
-✅ model ladder (1B/3B/8B, motherboard theory)
+✅ model ladder (Copilot: gpt-4o-mini + gpt-4.1, motherboard theory)
 ✅ toolset (all 4: files/system/code/web)
 ✅ gatekeeper (extra-hard, default-deny, sanitized, audited)
 ✅ growth plan (model-agnostic upgrades, memory carries 1:1)
+✅ brain live (Copilot API, 2026-09-10; Ollama retired, user is always online)
 
-⏳ NOT YET BUILT — this is the plan awaiting implementation.
+⏳ BUILD COMPLETE (v0.1) + BRAIN LIVE (v0.2) — remaining work is tuning and new features.
 ```
 
 ---
@@ -254,6 +259,11 @@ PHASE 1 (NOW, 8GB CPU):
   - build full system on 3B/8B
   - all layers model-agnostic
   - start accumulating real memory about the user
+
+PHASE 1.5 (2026-09-12): WEBFACE SHIPPED
+  - serene-tech browser face (aurora + breathing orb), localhost-only, stdlib
+  - run: scripts\run-webface.cmd  |  python -m webface
+  - v2: in-UI gatekeeper approval modal, markdown renderer, history
 
 PHASE 2 (2027, Victus RTX 3050 / 16GB):
   - motherboard swap → Qwen3 14B on GPU
@@ -282,7 +292,7 @@ A working, private, offline agent on this laptop:
 
 ## 12. Notes / Honest Truths
 
-- An 8B model on CPU is a starter **motherboard**, not the final brain.
+- The cloud brain (gpt-4o-mini / gpt-4.1) is the current **motherboard**; local 8B+ models become interesting again only on GPU hardware that beats cloud on quality-per-RAM (the 2027 Victus).
 - The model cannot "become sentient" or absorb belief systems by itself — it's a frozen engine; the only thing that learns is curated external memory.
-- With the current 8GB laptop, only ONE big model is hot at a time; close other apps when the 8B is active.
-- Real sub-second speed requires a GPU (the 2027 laptop). The ladder design keeps 80% of interactions snappy even on CPU.
+- Using the Copilot API is perfect for a personal, private agent. Don't wrap it into a public product or reseller API later — that violates the access terms.
+- The cloud brain keeps all 8GB RAM free (no local inference resident), and the rule-based router keeps 80% of interactions snappy and cheap.
