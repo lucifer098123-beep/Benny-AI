@@ -40,6 +40,12 @@ BODY BUILT (v0.1) + BRAIN LIVE (v0.2, Copilot). Pure Python stdlib, ₹0, runs o
 - Security stance: gatekeeper auto-answers NO (`ask_callback=False`) — no silent network. An in-UI approval gate is the v2 upgrade alongside a markdown renderer + conversation history.
 - Verified: boot + auth, GET / (orb + aurora present), CSS (breathe/morph keyframes), JS, favicon, POST /chat round-trip (mem counter + level + latency returned), py_compile + zero-third-party check green.
 
+## Eyes + soul (2026-09-12, webface v0.2)
+- **Vision lane PROVEN LIVE:** benny looks at an image/gif and describes it — `meta/llama-3.2-11b-vision-instruct` on build.nvidia's free NIM API (`benny/core/vision.py`, VisionBrain). Zero deps, ₹0 key already in `config/secrets.json` (gitignored). Verified: attaches a photo → returns "Yes, there is a car in this image" in ~3.5s through the webface `/see` route.
+- **Persona layer:** `persona/identity.md` + `persona/user.md` + `persona/emoji.md` — the full soul: how benny talks, deep read on the user, and the emoji vault (incl. the lost/rare emoji). Loaded into every system prompt on top of the un-editable `config/identity.json` core. Motherboard theory intact: persona is a layer, never a weld.
+- **GIF reactions:** `webface/static/gifs/` reaction pack — mood-mapped, served from benny's own box (localhost-only, nothing fetched). Drop files per the README manifest (grin.gif, laugh.gif, t_t.gif, kudos.gif…). Restraint rule: one per punchline.
+- **Deploy note:** `meta/llama-3.2-90b-vision-instruct` in nvidia's official sample times out under load — 11b is the real worker. The API's model catalog goes stale (410/404 on dead IDs) — always probe live before wiring a model.
+
 ## Next
 - Run the live TUI: `python -m benny`.
 - (Optional) tune `config/settings.json` brain models or level routing.
