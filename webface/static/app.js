@@ -11,19 +11,75 @@
   const levelBadge = document.getElementById("level-badge");
   const memChip = document.getElementById("mem-chip");
   const latChip = document.getElementById("lat-chip");
+  const clearBtn = document.getElementById("clear");
+  const approval = document.getElementById("approval");
+  const approvalUrl = document.getElementById("approval-url");
+  const approvalQuery = document.getElementById("approval-query");
+  const approvalYes = document.getElementById("approval-yes");
+  const approvalNo = document.getElementById("approval-no");
+  let approvalPoll = null;
 
   function esc(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  // minimal formatting: backticks -> code, nothing else. keeps replies honest.
+  // markdown-lite renderer: headers, bold/italic, code blocks + spans,
+  // bullet/numbered lists, links, horizontal rules, <br> paragraphs.
+  // everything is escaped first; code and html-only links only (no scripts).
   function render(text) {
-    const parts = text.split(/`([^`]+)`/g);
-    return parts
-      .map((p, i) =>
-        i % 2 === 1 ? "<code>" + esc(p) + "</code>" : esc(p).replace(/\n/g, "<br>")
-      )
-      .join("");
+    const stash = [];
+    const hold = (html) => { stash.push(html); return "\u0000" + (stash.length - 1) + "\u0000"; };
+
+    function inline(s) {
+      // links — https only, never raw javascript:
+      s = s.replace(/\[([^\]]*)\]\(([^)\s]*)\)/g, (m, t, u) =>
+        /^https?:\/\//i.test(u)
+          ? '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + "</a>"
+          : t);
+      // bold **x** before italic *x* so the * inside ** isn't eaten
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      return s;
+    }
+
+    let html = esc(text).replace(/\r\n?/g, "\n");
+    // code blocks first (their content is already escaped + stashed)
+    html = html.replace(/```([\s\S]*?)```/g, (_, code) =>
+      hold("<pre><code>" + code.replace(/^\n|\n$/g, "") + "</code></pre>"));
+    // inline code spans
+    html = html.replace(/`([^`\n]+)`/g, (_, code) => hold("<code>" + code + "</code>"));
+
+    const out = [];
+    let brace = null; // open <ul>/<ol> while collecting items
+    let para = [];    // current plain-text group
+
+    const flushPara = () => { if (para.length) { out.push(para.join("<br>")); para = []; } };
+    const flushList = () => { if (brace) { out.push("</" + brace + ">"); brace = null; } };
+    const flushAll = () => { flushPara(); flushList(); };
+
+    for (const ln of html.split("\n")) {
+      if (!ln.trim()) { flushAll(); continue; }               // blank = block break
+      if (/^\s*(?:---|\*\*\*|___)\s*$/.test(ln)) {            // hr
+        flushAll(); out.push("<hr>");
+      } else if (/^(#{1,4})\s+(.*)$/.test(ln)) {              // headers
+        flushAll();
+        const lvl = RegExp.$1.length;
+        out.push("<h" + lvl + ">" + inline(RegExp.$2) + "</h" + lvl + ">");
+      } else if (/^\s*[-*+]\s+(.*)$/.test(ln)) {              // ul
+        flushPara();
+        if (brace !== "ul") { flushList(); brace = "ul"; out.push("<ul>"); }
+        out.push("<li>" + inline(RegExp.$1) + "</li>");
+      } else if (/^\s*\d+[.)]\s+(.*)$/.test(ln)) {            // ol
+        flushPara();
+        if (brace !== "ol") { flushList(); brace = "ol"; out.push("<ol>"); }
+        out.push("<li>" + inline(RegExp.$1) + "</li>");
+      } else {                                                // plain group
+        flushList();
+        para.push(inline(ln));
+      }
+    }
+    flushAll();
+    return out.join("").replace(/\u0000(\d+)\u0000/g, (_, n) => stash[+n]);
   }
 
   function addMsg(who, text, typing) {
@@ -168,8 +224,80 @@
 
   function setBusy(busy) {
     send.disabled = busy;
-    if (busy) orb.classList.add("thinking");
-    else orb.classList.remove("thinking");
+    if (busy) {
+      orb.classList.add("thinking");
+      startApprovalPoll();
+    } else {
+      orb.classList.remove("thinking");
+      stopApprovalPoll();
+      hideApproval();
+    }
+  }
+
+  // ---- conversation history ----
+  async function loadHistory() {
+    try {
+      const res = await fetch("/history", { cache: "no-store" });
+      const data = await res.json();
+      for (const m of data.messages || []) {
+        if (m.who === "you") {
+          addMsg("you", m.text);
+        } else {
+          const el = addMsg("benny", m.text);
+          const gif = pickGif(m.text);
+          if (gif) appendGif(el.querySelector(".bubble"), gif);
+        }
+      }
+      chat.scrollTop = chat.scrollHeight;
+    } catch (_) { /* history is a bonus, not a requirement */ }
+  }
+
+  async function clearChat() {
+    if (!window.confirm("wipe this conversation history?")) return;
+    try {
+      await fetch("/clear", { method: "POST" });
+    } catch (_) {}
+    chat.innerHTML = "";
+  }
+
+  // ---- gatekeeper approval modal ----
+  function startApprovalPoll() {
+    stopApprovalPoll();
+    approvalPoll = setInterval(async () => {
+      try {
+        const res = await fetch("/approval-status", { cache: "no-store" });
+        const d = await res.json();
+        if (d && d.pending) showApproval(d);
+        else hideApproval();
+      } catch (_) {}
+    }, 700);
+  }
+
+  function stopApprovalPoll() {
+    if (approvalPoll) { clearInterval(approvalPoll); approvalPoll = null; }
+  }
+
+  function showApproval(d) {
+    approvalUrl.textContent = d.url || "?";
+    approvalQuery.textContent = d.query
+      ? "query: " + d.query
+      : "benny wants to fetch a URL you haven't allowed yet.";
+    approval.hidden = false;
+  }
+
+  function hideApproval() {
+    approval.hidden = true;
+  }
+
+  async function answerApproval(approved) {
+    try {
+      await fetch("/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+    } catch (_) {}
+    hideApproval();
   }
 
   async function ping() {
@@ -253,8 +381,12 @@
   send.addEventListener("click", ask);
   attach.addEventListener("click", () => file.click());
   file.addEventListener("change", attachFile);
+  clearBtn.addEventListener("click", clearChat);
+  approvalYes.addEventListener("click", () => answerApproval(true));
+  approvalNo.addEventListener("click", () => answerApproval(false));
   entry.addEventListener("keydown", (e) => {
     if (e.key === "Enter") ask();
   });
+  loadHistory();
   entry.focus();
 })();

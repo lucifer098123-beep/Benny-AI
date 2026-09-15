@@ -37,8 +37,19 @@ BODY BUILT (v0.1) + BRAIN LIVE (v0.2, Copilot). Pure Python stdlib, ₹0, runs o
 - `webface/` = serene-tech browser UI (aurora backdrop + breathing Siri-style orb). Pure stdlib `http.server`, localhost-only (`127.0.0.1:7749`), zero deps, engine untouched — it's a front door, not a rebuild.
 - Run: `scripts\run-webface.cmd` (boots + opens browser) or `python -m webface`.
 - Same Agent the TUI uses: device-lock auth on boot, `agent.respond()` per message, memory counter + level badge + latency chips live in the topbar.
-- Security stance: gatekeeper auto-answers NO (`ask_callback=False`) — no silent network. An in-UI approval gate is the v2 upgrade alongside a markdown renderer + conversation history.
 - Verified: boot + auth, GET / (orb + aurora present), CSS (breathe/morph keyframes), JS, favicon, POST /chat round-trip (mem counter + level + latency returned), py_compile + zero-third-party check green.
+
+## Webface v0.3 (2026-09-15) — markdown, history, approval gate
+- **Markdown-lite renderer:** `webface/static/app.js` `render()` now renders bold/italic, `#`–`####` headers, bullet/numbered lists, inline code, fenced code blocks, https-only links, and `---` rules. HTML-escaped first, code stashed as placeholders so formatting never corrupts it, `javascript:` links refused.
+- **Conversation history:** server persists every exchange to `data/conversations/conversations.json` (project-relative, capped at 500). `GET /history` replays on page load; `clear` button → `POST /clear`. Images aren't persisted (no base64 blobs on disk).
+- **Gatekeeper approval modal:** replaces the old auto-deny. On a fetch to a new domain, `server.py` `_ask_modal` registers the pending request; the UI polls `/approval-status` and shows an allow/deny modal with the URL + query. `POST /approve` answers it. **Fail-closed:** no answer within 45s = deny. Audit log still records every attempt. Already-approved domains stay remembered per-session.
+
+## Path authority (relative-only, self-contained — 2026-09-15)
+- `benny/paths.py` is the SINGLE path authority. Every file/dir benny touches resolves from one root: the project folder.
+- **Rules enforced:** relative-only (refuses absolute addresses), self-contained (a containment guard raises if any configured path would escape the project root), no hardcoded drives, no config scattered into `C:\` / Program Files / `~/.config` / AppData. Move or copy the folder to any device and everything just works.
+- All subsystem dirs (memory, audit, logs, security, conversations) are declared in `config/settings.json` `paths` and resolved via `paths.resolve()`. `engine.py`, `device_lock.py`, `brain.py`, `vision.py`, `webface/server.py` all route through it.
+- `system.disk_usage()` no longer defaults to `C:\` — it derives benny's own drive/root, portable on any OS layout.
+- Verify on any device: `python scripts/path_check.py` → 9/9 PASS.
 
 ## Eyes + soul (2026-09-12, webface v0.2)
 - **Vision lane PROVEN LIVE:** benny looks at an image/gif and describes it — `meta/llama-3.2-11b-vision-instruct` on build.nvidia's free NIM API (`benny/core/vision.py`, VisionBrain). Zero deps, ₹0 key already in `config/secrets.json` (gitignored). Verified: attaches a photo → returns "Yes, there is a car in this image" in ~3.5s through the webface `/see` route.

@@ -25,11 +25,15 @@ def _wmic_capture(cmd: list[str]) -> list[str]:
 
 class DeviceLock:
     def __init__(self, cfg: dict):
+        import benny.paths as paths
         c = cfg.get("security", {}).get("fingerprint", {})
         self.enabled = c.get("enabled", False)
         self.device_ids = set(c.get("device_ids", []))
         self.max_failures = cfg.get("security", {}).get("tamper", {}).get("max_failures", 3)
-        self._fail_file = Path(__file__).resolve().parent.parent.parent / "data" / "security" / "failures.json"
+        # failures.json lives under the project root via the configured
+        # security dir — same self-contained home on every device.
+        rel = cfg.get("paths", {}).get("security_dir", "data/security")
+        self._fail_file = paths.resolve(rel) / "failures.json"
 
     def current_fingerprint(self) -> dict:
         fp = {

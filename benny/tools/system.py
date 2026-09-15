@@ -14,7 +14,12 @@ def info() -> str:
     return "\n".join(lines)
 
 
-def disk_usage(path: str = "C:\\") -> str:
+def disk_usage(path: str = "") -> str:
+    if not path:
+        # no hardcoded drive — default to benny's own root so it works on
+        # any device layout (C:\, D:\, /home, /mnt, …)
+        import benny.paths as paths
+        path = str(paths.project_root().anchor or paths.project_root())
     try:
         usage = os.statvfs(path)
     except AttributeError:

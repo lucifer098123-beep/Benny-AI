@@ -15,10 +15,11 @@
       <div class="orb" id="orb" role="img" aria-label="benny is breathing"></div>
       <div class="brandtxt">
         <span class="name">benny</span>
-        <span class="version" id="version">webface 0.1</span>
+        <span class="version" id="version">webface 0.3</span>
       </div>
     </div>
     <div class="meta">
+      <button id="clear" class="chip clear" title="clear chat history">clear</button>
       <span class="badge" id="level-badge">novice</span>
       <span class="chip" id="mem-chip">mem 0</span>
       <span class="chip" id="lat-chip"></span>
@@ -38,6 +39,18 @@ now with eyes — attach an image or gif and i'll describe it.</div>
     <button id="send" title="send">↵</button>
     <input id="file" type="file" accept="image/*,.gif" hidden>
   </footer>
+</div>
+
+<div id="approval" hidden>
+  <div class="approval-card">
+    <div class="approval-title">benny wants the network</div>
+    <div class="approval-url" id="approval-url"></div>
+    <div class="approval-query" id="approval-query"></div>
+    <div class="approval-actions">
+      <button id="approval-no" class="aba ab-no">deny</button>
+      <button id="approval-yes" class="aba ab-yes">allow once</button>
+    </div>
+  </div>
 </div>
 
 <script src="app.js"></script>

@@ -14,8 +14,8 @@ import urllib.request
 
 
 def _load_nvidia_key() -> str | None:
-    from ..core import project_root
-    sf = project_root() / "config" / "secrets.json"
+    import benny.paths as paths
+    sf = paths.resolve("config", "secrets.json")
     if sf.exists():
         try:
             data = json.loads(sf.read_text(encoding="utf-8"))

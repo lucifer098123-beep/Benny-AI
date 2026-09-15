@@ -263,7 +263,8 @@ PHASE 1 (NOW, 8GB CPU):
 PHASE 1.5 (2026-09-12): WEBFACE SHIPPED
   - serene-tech browser face (aurora + breathing orb), localhost-only, stdlib
   - run: scripts\run-webface.cmd  |  python -m webface
-  - v2: in-UI gatekeeper approval modal, markdown renderer, history
+  - v0.3 (2026-09-15): markdown renderer, conversation history, in-UI approval
+    gate, + paths.py single path authority (relative-only, self-contained)
 
 PHASE 2 (2027, Victus RTX 3050 / 16GB):
   - motherboard swap → Qwen3 14B on GPU
