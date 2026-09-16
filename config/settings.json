@@ -8,7 +8,9 @@
   "paths": {
     "memory_dir": "data/memory",
     "audit_dir": "data/audit",
-    "log_dir": "data/logs"
+    "log_dir": "data/logs",
+    "security_dir": "data/security",
+    "conversation_dir": "data/conversations"
   },
   "memory": {
     "budget": {

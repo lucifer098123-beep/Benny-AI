@@ -5,6 +5,7 @@ rule-based router + optional cloud/local brain.
 """
 from __future__ import annotations
 
+import benny.paths as paths
 from . import load_config, setup_logging, project_root
 from .brain import build_brain, CopilotBrain, GeminiBrain, OpenAIBrain
 from .judge import Judge
@@ -19,7 +20,7 @@ log = setup_logging()
 def _load_identity(root, cfg) -> dict:
     """Load the core constitution (identity.json) — benny's un-editable soul."""
     import json
-    path = root / "config" / "identity.json"
+    path = paths.resolve("config", "identity.json")
     if path.exists():
         try:
             return json.loads(path.read_text(encoding="utf-8"))
@@ -32,17 +33,17 @@ class Agent:
     def __init__(self, ask_callback=None):
         self.cfg = load_config()
         self.root = project_root()
-        self.memory = MemoryStore(self.root / self.cfg["paths"]["memory_dir"])
-        self.history = HistoryStore(self.root / self.cfg["paths"]["memory_dir"])
+        self.memory = MemoryStore(paths.resolve(self.cfg["paths"]["memory_dir"]))
+        self.history = HistoryStore(paths.resolve(self.cfg["paths"]["memory_dir"]))
         self.lock = DeviceLock(self.cfg)
         self.gatekeeper = Gatekeeper(
             self.cfg,
-            self.root / self.cfg["paths"]["audit_dir"],
+            paths.resolve(self.cfg["paths"]["audit_dir"]),
             ask_callback=ask_callback,
         )
         self.tools = self._build_tools()
         self.brain = build_brain(self.cfg)
-        self.judge = Judge(self.cfg, self.root / self.cfg["paths"]["audit_dir"])
+        self.judge = Judge(self.cfg, paths.resolve(self.cfg["paths"]["audit_dir"]))
         self.identity = _load_identity(self.root, self.cfg)
         self.system_prompt = self.identity.get(
             "system_prompt",
@@ -281,7 +282,7 @@ class Agent:
     def _load_persona(self) -> str:
         """Load the persona layer (identity + user-understanding + emoji vault)
         from the persona/ folder, on top of the core identity.json soul."""
-        persona_dir = self.root / "persona"
+        persona_dir = paths.resolve("persona")
         sections = []
         for name in ("identity.md", "user.md", "emoji.md"):
             f = persona_dir / name

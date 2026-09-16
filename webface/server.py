@@ -3,6 +3,8 @@
 Serves a static chat UI on localhost and relays to the same Agent the
 terminal runs. The engine/memory/gatekeeper are untouched — this is a
 front door, not a rebuild.
+
+v0.3 merged: sessions + model port + approval gate + path authority.
 """
 from __future__ import annotations
 
@@ -14,6 +16,8 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+
+import benny.paths as paths  # noqa: E402  (needs the sys.path insert above)
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -100,8 +104,68 @@ def _sess_history(data: dict) -> list:
             for m in data.get("messages", [])]
 
 
+# ---- flat conversation history (backwards compat, data/conversations/) ----
+MAX_HISTORY = 500
+CONVERSATIONS = paths.resolve(
+    paths.load_settings()["paths"]["conversation_dir"]
+) / "conversations.json"
+
+
+def _load_history() -> list[dict]:
+    if CONVERSATIONS.exists():
+        try:
+            return json.loads(CONVERSATIONS.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+
+def _save_history(msgs: list[dict]) -> None:
+    CONVERSATIONS.parent.mkdir(parents=True, exist_ok=True)
+    CONVERSATIONS.write_text(json.dumps(msgs[-MAX_HISTORY:]), encoding="utf-8")
+
+
+def _append_history(who: str, text: str) -> None:
+    msgs = _load_history()
+    msgs.append({"who": who, "text": text, "ts": time.time()})
+    _save_history(msgs)
+
+
+# ---- gatekeeper approval gate (in-UI modal) ----
+APPROVAL_TIMEOUT = 45  # seconds; fail-closed (deny) if the user never answers
+_approval_lock = threading.Lock()
+_approval = {"pending": False, "url": "", "query": "", "ts": 0.0}
+_approval_answer: bool | None = None
+
+
+def _ask_modal(prompt: str) -> bool:
+    """ask_callback for the browser face: registers a pending approval and
+    blocks until the user answers in the UI. Default-deny on timeout."""
+    global _approval, _approval_answer
+    url = query = ""
+    for part in prompt.splitlines():
+        if part.startswith("Allow Benny to fetch:"):
+            url = part.split(":", 1)[1].strip()
+        elif part.startswith("(query:"):
+            query = part[1:-1].replace("query:", "").strip().rstrip(")")
+    with _approval_lock:
+        _approval = {"pending": True, "url": url or prompt, "query": query, "ts": time.time()}
+        _approval_answer = None
+    try:
+        deadline = time.monotonic() + APPROVAL_TIMEOUT
+        while time.monotonic() < deadline:
+            with _approval_lock:
+                if not _approval["pending"]:
+                    return bool(_approval_answer)
+            time.sleep(0.2)
+        return False  # fail closed — no answer means no network
+    finally:
+        with _approval_lock:
+            _approval["pending"] = False
+
+
 class WebfaceHandler(BaseHTTPRequestHandler):
-    server_version = "benny-webface/0.1"
+    server_version = "benny-webface/0.3"
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
@@ -162,6 +226,11 @@ class WebfaceHandler(BaseHTTPRequestHandler):
                 self._json(503, {"error": "agent not up"})
             else:
                 self._json(200, {"brain": agent.brain_status(), "vision": bool(vision and vision.ready)})
+        elif url.path == "/history":
+            self._json(200, {"messages": _load_history(), "max": MAX_HISTORY})
+        elif url.path == "/approval-status":
+            with _approval_lock:
+                self._json(200, _approval)
         elif url.path.startswith("/gifs/"):
             self._serve_gif(url.path[len("/gifs/"):])
         else:
@@ -188,6 +257,11 @@ class WebfaceHandler(BaseHTTPRequestHandler):
             self._session_post()
         elif url.path == "/brain":
             self._brain_post()
+        elif url.path == "/clear":
+            _save_history([])
+            self._json(200, {"ok": True, "messages": 0})
+        elif url.path == "/approve":
+            self._approve()
         else:
             self._json(404, {"error": "not found"})
 
@@ -274,6 +348,8 @@ class WebfaceHandler(BaseHTTPRequestHandler):
         if data["title"] in (None, "new chat") and not is_new:
             data["title"] = text.strip().splitlines()[0][:48]
         _sess_save(data)
+        _append_history("you", text)
+        _append_history("benny", reply)
 
         self._json(200, {
             "session_id": data["id"],
@@ -308,7 +384,6 @@ class WebfaceHandler(BaseHTTPRequestHandler):
         # gif: the message arrives with several sampled frames as base64 list -> join
         frames = payload.get("frames") or []
         if frames:
-            # pipe each sampled frame through the VLM, return the most confident read
             reads = []
             for f in frames[:6]:
                 reads.append(vision.describe(image_b64=str(f), question=question, heavy=heavy))
@@ -318,10 +393,32 @@ class WebfaceHandler(BaseHTTPRequestHandler):
         else:
             reply = vision.describe(image_url=url or None, image_b64=img_b64 or None,
                                     question=question, heavy=heavy)
+        _append_history("you", f"(image) {question}" if not frames else f"(gif) {question}")
+        _append_history("benny", reply)
         self._json(200, {
             "reply": reply,
             "latency_ms": int((time.monotonic() - t0) * 1000),
         })
+
+    def _approve(self):
+        """User answered the approval modal: allow or deny the pending fetch."""
+        global _approval, _approval_answer
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            payload = json.loads(raw.decode("utf-8"))
+            approved = bool(payload.get("approved"))
+        except Exception:
+            self._json(400, {"error": "bad request"})
+            return
+        with _approval_lock:
+            if not _approval["pending"]:
+                self._json(409, {"error": "no pending approval"})
+                return
+            _approval_answer = approved
+            _approval["pending"] = False
+            _approval["answer"] = approved
+        self._json(200, {"ok": True, "approved": approved})
 
     def _serve_file(self, name: str, ctype: str) -> None:
         path = STATIC / name
@@ -338,10 +435,10 @@ class WebfaceHandler(BaseHTTPRequestHandler):
 def boot() -> None:
     """Authenticate once, like the terminal does."""
     global agent, vision, boot_error
-    # deny-by-default: the browser face has no ask-modal yet, so the gatekeeper
-    # auto-answers NO on its behalf (no silent network allowance). audit log still
-    # records every attempt. v2 replaces this with a real in-UI approval gate.
-    global_agent = Agent(ask_callback=lambda _p: False)
+    # browser face: the gatekeeper asks the USER in an in-UI modal, not via a
+    # silent prompt. unanswered approvals fail closed (deny). audit log keeps
+    # every attempt.
+    global_agent = Agent(ask_callback=_ask_modal)
     ok, msg = global_agent.authenticate()
     if not ok:
         boot_error = f"SECURITY: {msg}"
@@ -360,7 +457,7 @@ def main() -> None:
     if agent is None:
         print(f"benny webface: {boot_error}")
         sys.exit(1)
-    print(f"benny webface v0.2 — {agent.identity.get('core', {}).get('name', 'benny')} @ {HOST}:{PORT}")
+    print(f"benny webface v0.3 — {agent.identity.get('core', {}).get('name', 'benny')} @ {HOST}:{PORT}")
     print(f"security: {getattr(agent, '_boot_ms', 'ok')}")
     print("open http://127.0.0.1:7749  (ctrl+c to stop)")
     httpd = ThreadingHTTPServer((HOST, PORT), WebfaceHandler)

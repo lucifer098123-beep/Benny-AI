@@ -15,6 +15,12 @@
   const sessionList = $("session-list");
   const sessionEmpty = $("session-empty");
   const topTitle = $("top-title");
+  const approval = $("approval");
+  const approvalUrl = $("approval-url");
+  const approvalQuery = $("approval-query");
+  const approvalYes = $("approval-yes");
+  const approvalNo = $("approval-no");
+  let approvalPoll = null;
 
   const ICO_EYE =
     '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -70,15 +76,63 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // markdown-lite renderer: headers, bold/italic, code blocks + spans,
+  // bullet/numbered lists, links, horizontal rules, <br> paragraphs.
+  // everything is escaped first; code and html-only links only (no scripts).
   function render(text) {
-    const parts = String(text).split(/`([^`]+)`/g);
-    return parts
-      .map(function (p, i) {
-        return i % 2 === 1
-          ? "<code>" + esc(p) + "</code>"
-          : esc(p).replace(/\n/g, "<br>");
-      })
-      .join("");
+    const stash = [];
+    const hold = (html) => { stash.push(html); return "\u0000" + (stash.length - 1) + "\u0000"; };
+
+    function inline(s) {
+      // links — https only, never raw javascript:
+      s = s.replace(/\[([^\]]*)\]\(([^)\s]*)\)/g, (m, t, u) =>
+        /^https?:\/\//i.test(u)
+          ? '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + "</a>"
+          : t);
+      // bold **x** before italic *x* so the * inside ** isn't eaten
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      return s;
+    }
+
+    let html = esc(text).replace(/\r\n?/g, "\n");
+    // code blocks first (their content is already escaped + stashed)
+    html = html.replace(/```([\s\S]*?)```/g, (_, code) =>
+      hold("<pre><code>" + code.replace(/^\n|\n$/g, "") + "</code></pre>"));
+    // inline code spans
+    html = html.replace(/`([^`\n]+)`/g, (_, code) => hold("<code>" + code + "</code>"));
+
+    const out = [];
+    let brace = null; // open <ul>/<ol> while collecting items
+    let para = [];    // current plain-text group
+
+    const flushPara = () => { if (para.length) { out.push(para.join("<br>")); para = []; } };
+    const flushList = () => { if (brace) { out.push("</" + brace + ">"); brace = null; } };
+    const flushAll = () => { flushPara(); flushList(); };
+
+    for (const ln of html.split("\n")) {
+      if (!ln.trim()) { flushAll(); continue; }               // blank = block break
+      if (/^\s*(?:---|\*\*\*|___)\s*$/.test(ln)) {            // hr
+        flushAll(); out.push("<hr>");
+      } else if (/^(#{1,4})\s+(.*)$/.test(ln)) {              // headers
+        flushAll();
+        const lvl = RegExp.$1.length;
+        out.push("<h" + lvl + ">" + inline(RegExp.$2) + "</h" + lvl + ">");
+      } else if (/^\s*[-*+]\s+(.*)$/.test(ln)) {              // ul
+        flushPara();
+        if (brace !== "ul") { flushList(); brace = "ul"; out.push("<ul>"); }
+        out.push("<li>" + inline(RegExp.$1) + "</li>");
+      } else if (/^\s*\d+[.)]\s+(.*)$/.test(ln)) {            // ol
+        flushPara();
+        if (brace !== "ol") { flushList(); brace = "ol"; out.push("<ol>"); }
+        out.push("<li>" + inline(RegExp.$1) + "</li>");
+      } else {                                                // plain group
+        flushList();
+        para.push(inline(ln));
+      }
+    }
+    flushAll();
+    return out.join("").replace(/\u0000(\d+)\u0000/g, (_, n) => stash[+n]);
   }
 
   function addMsg(who, text, typing) {
@@ -120,11 +174,58 @@
   function showEmpty() { emptyEl.hidden = false; }
   function hideEmpty() { emptyEl.hidden = true; }
 
+  // ---- gatekeeper approval modal ----
+  function startApprovalPoll() {
+    stopApprovalPoll();
+    approvalPoll = setInterval(async () => {
+      try {
+        const d = await api("/approval-status", { cache: "no-store" });
+        if (d && d.pending) showApproval(d);
+        else hideApproval();
+      } catch (_) {}
+    }, 700);
+  }
+
+  function stopApprovalPoll() {
+    if (approvalPoll) { clearInterval(approvalPoll); approvalPoll = null; }
+  }
+
+  function hideApproval() {
+    if (approval) approval.hidden = true;
+  }
+
+  function showApproval(d) {
+    if (!approval) return;
+    approvalUrl.textContent = d.url || "?";
+    approvalQuery.textContent = d.query
+      ? "query: " + d.query
+      : "benny wants to fetch a URL you haven't allowed yet.";
+    approval.hidden = false;
+  }
+
+  async function answerApproval(approved) {
+    try {
+      await api("/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+    } catch (_) {}
+    hideApproval();
+  }
+
+  if (approvalYes && approvalNo) {
+    approvalYes.addEventListener("click", () => answerApproval(true));
+    approvalNo.addEventListener("click", () => answerApproval(false));
+  }
+
   function setBusy(busy) {
     state.busy = busy;
     send.disabled = busy;
     attach.disabled = busy;
     setOrbsThinking(busy);
+    if (busy) startApprovalPoll();
+    else { stopApprovalPoll(); hideApproval(); }
   }
 
   function relTime(tsSec) {
