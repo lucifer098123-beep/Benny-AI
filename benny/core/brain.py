@@ -130,6 +130,68 @@ class CopilotBrain(Brain):
             return f"brain-error: {e}"
 
 
+class OpenAIBrain(Brain):
+    """Generic OpenAI-compatible brain — the MODEL PORT.
+
+    Any endpoint that speaks /chat/completions with a Bearer key fits:
+    OpenAI, NVIDIA NIM, OpenRouter, local servers, etc. The motherboard
+    theory at work: swap the model without touching memory/tools/security.
+    """
+
+    name = "openai"
+
+    @staticmethod
+    def default_endpoint() -> str:
+        return "https://api.openai.com/v1/chat/completions"
+
+    def __init__(self, endpoint: str, token: str | None, model: str = "gpt-4o-mini",
+                 model_heavy: str | None = None):
+        self.endpoint = endpoint or self.default_endpoint()
+        self.model = model or "gpt-4o-mini"
+        self.model_heavy = model_heavy or self.model
+        self.token = token
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.token) and bool(self.endpoint)
+
+    def generate(self, prompt: str, system: str = "", heavy: bool = False,
+                 timeout: int = 90) -> str:
+        if not self.ready:
+            return "NO_API_KEY"
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        body = {
+            "model": self.model_heavy if heavy else self.model,
+            "messages": messages,
+            "stream": False,
+            "temperature": 0.7,
+        }
+        req = urllib.request.Request(
+            self.endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip() or "(empty)"
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return "brain-error: api key rejected"
+            if e.code == 429:
+                return "brain-error: rate limited — wait a moment and retry"
+            return f"brain-error: api {e.code}"
+        except Exception as e:
+            return f"brain-error: {e}"
+
+
 class GeminiBrain(Brain):
     """Free-tier Gemini via the generativelanguage API. Needs GOOGLE_API_KEY
     in the environment or config/secrets.json. ₹0 up to 500 req/day (Flash)."""
@@ -173,9 +235,38 @@ class GeminiBrain(Brain):
 
 
 def build_brain(cfg: dict) -> Brain:
-    """Choose brain based on config ('none' | 'copilot' | 'gemini' | 'rule')."""
+    """Choose brain based on config ('none' | 'copilot' | 'gemini' | 'rule' |
+    | 'openai' | 'nvidia').
+
+    The MODEL PORT: `openai` and `nvidia` modes read a user-favoured model +
+    endpoint + api key straight from config, so benny can plug any model the
+    user likes without touching the rest of the stack.
+    """
     bcfg = cfg.get("brain", {})
     mode = bcfg.get("mode", "none")
+
+    if mode == "openai":
+        b = OpenAIBrain(
+            endpoint=bcfg.get("endpoint") or OpenAIBrain.default_endpoint(),
+            token=_load_secret("openai_api_key"),
+            model=bcfg.get("model") or "gpt-4o-mini",
+            model_heavy=bcfg.get("model_heavy"),
+        )
+        if b.ready:
+            return b
+        # no key — fall through to rule
+
+    if mode == "nvidia":
+        b = OpenAIBrain(
+            endpoint="https://integrate.api.nvidia.com/v1/chat/completions",
+            token=_load_secret("nvidia_api_key"),
+            model=bcfg.get("model") or "meta/llama-3.1-nemotron-51b-instruct",
+            model_heavy=bcfg.get("model_heavy"),
+        )
+        if b.ready:
+            return b
+        # no key — fall through to rule
+
     if mode == "copilot":
         b = CopilotBrain(
             model=bcfg.get("model") or "gpt-4o-mini",

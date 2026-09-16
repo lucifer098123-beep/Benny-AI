@@ -6,7 +6,7 @@ rule-based router + optional cloud/local brain.
 from __future__ import annotations
 
 from . import load_config, setup_logging, project_root
-from .brain import build_brain, CopilotBrain, GeminiBrain
+from .brain import build_brain, CopilotBrain, GeminiBrain, OpenAIBrain
 from .judge import Judge
 from ..memory import MemoryStore, HistoryStore
 from ..security.device_lock import DeviceLock
@@ -75,13 +75,73 @@ class Agent:
         except Exception as e:
             return f"ERROR: {tool}.{fn} raised {e}"
 
+    # ---- model port: hot-swap the brain without a restart ----
+    def swap_brain(self, endpoint: str | None = None, model: str | None = None,
+                   model_heavy: str | None = None, api_key: str | None = None) -> str:
+        """Rebuild the brain from a fresh config (the webface settings port).
+
+        Writes the user's favourite model choice back to settings.json and
+        secrets.json, then re-builds the brain in place. Memory/tools/security
+        never change — motherboard theory holds.
+        """
+        import json as _json
+        from .brain import OpenAIBrain
+
+        cfg = self.cfg
+        bcfg = dict(cfg.get("brain", {}))
+        if endpoint:
+            bcfg["mode"] = "openai"
+            bcfg["endpoint"] = endpoint
+        if model:
+            bcfg["model"] = model
+        if model_heavy:
+            bcfg["model_heavy"] = model_heavy
+        cfg["brain"] = bcfg
+        cfg_path = self.root / "config" / "settings.json"
+        cfg_path.write_text(_json.dumps(cfg, indent=2), encoding="utf-8")
+
+        if api_key:
+            secrets_path = self.root / "config" / "secrets.json"
+            secrets = {}
+            if secrets_path.exists():
+                try:
+                    secrets = _json.loads(secrets_path.read_text(encoding="utf-8"))
+                except Exception:
+                    secrets = {}
+            secrets["openai_api_key"] = api_key
+            secrets_path.write_text(_json.dumps(secrets, indent=2), encoding="utf-8")
+
+        self.cfg = load_config()
+        self.brain = build_brain(self.cfg)
+        name = getattr(self.brain, "name", "rule")
+        if name == "rule":
+            return f"brain: {name} (no key on this model — check the api key)"
+        return f"brain: {name} @ {getattr(self.brain, 'model', '?')}"
+
+    def brain_status(self) -> dict:
+        """Report what's under the hood, for the webface settings panel."""
+        b = self.brain
+        name = getattr(b, "name", "rule")
+        model = getattr(b, "model", "rule")
+        heavy = getattr(b, "model_heavy", None)
+        endpoint = getattr(b, "endpoint", None)
+        ready = getattr(b, "ready", name == "rule") and name != "rule"
+        live = name != "rule" and bool(getattr(b, "token", None) or getattr(b, "key", None))
+        return {
+            "mode": name,
+            "model": model,
+            "model_heavy": heavy,
+            "endpoint": endpoint,
+            "ready": live,
+        }
+
     # ---- the response path (rule-based v1 brain) ----
-    def respond(self, user_input: str) -> str:
+    def respond(self, user_input: str, history: list | None = None) -> str:
         self.memory.record_episode("user", user_input)
         new_pat = self.memory.recombine()
 
         text = user_input.lower().strip()
-        real_brain = isinstance(self.brain, (CopilotBrain, GeminiBrain))
+        real_brain = isinstance(self.brain, (CopilotBrain, GeminiBrain, OpenAIBrain))
         out = ""
 
         cmd = self._route_command(text, user_input, real_brain)
@@ -102,7 +162,8 @@ class Agent:
                          f"{rec['reason']}]")
             prompt = self.build_system_prompt(user_input)
             out = self.brain.generate(
-                user_input, system=prompt, heavy=self._needs_heavy(user_input)
+                self._with_history(user_input, history),
+                system=prompt, heavy=self._needs_heavy(user_input)
             )
             if extra:
                 out += extra
@@ -123,6 +184,24 @@ class Agent:
         if new_pat:
             out += f"\n[learned {len(new_pat)} pattern(s)]"
         return out
+
+    @staticmethod
+    def _with_history(prompt: str, history: list | None) -> str:
+        """Prepend the session's recent conversation so the brain has context.
+
+        history = [{role: user|benny, content}, ...] taken from the active
+        webface session. Kept short (last 10 turns) — enough to follow along
+        without drowning the model.
+        """
+        if not history:
+            return prompt
+        lines = []
+        for m in history[-10:]:
+            who = "USER" if m.get("role") == "user" else "BENNY"
+            lines.append(f"{who}: {m.get('content', '')}")
+        if lines:
+            return "(recent conversation so far)\n" + "\n".join(lines) + f"\n\nUSER: {prompt}"
+        return prompt
 
     def _route_command(self, text: str, raw: str, real_brain: bool) -> str | None:
         """Intercept explicit commands. Free-form text is left for the model.
